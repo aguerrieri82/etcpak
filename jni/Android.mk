@@ -11,6 +11,8 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := etcpack
 
 LOCAL_CFLAGS += -Wno-implicit-function-declaration
+LOCAL_CPPFLAGS += -D__ARM_NEON
+
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../zlib
 
