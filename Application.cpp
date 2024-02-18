@@ -2,7 +2,7 @@
 #include <math.h>
 #include <memory>
 #include <string.h>
-#include <tracy/Tracy.hpp>
+//#include <tracy/Tracy.hpp>
 
 #ifdef _MSC_VER
 #  include "getopt/getopt.h"
@@ -50,7 +50,7 @@ void Usage()
 
 int main( int argc, char** argv )
 {
-    TracyNoop;
+
 
     DebugLog::AddCallback( &DebugCallback );
 

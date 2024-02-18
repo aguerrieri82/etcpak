@@ -13,6 +13,7 @@ class Bitmap
 {
 public:
     Bitmap( const char* fn, unsigned int lines, bool bgr );
+    Bitmap(const char* data, unsigned int width, unsigned int height, unsigned int lines, bool bgr);
     Bitmap( const v2i& size );
     virtual ~Bitmap();
 
@@ -34,6 +35,7 @@ protected:
     unsigned int m_linesLeft;
     v2i m_size;
     bool m_alpha;
+    bool m_keepData = false;
     Semaphore m_sema;
     std::mutex m_lock;
     std::future<void> m_load;

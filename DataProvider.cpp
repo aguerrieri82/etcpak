@@ -16,6 +16,17 @@ DataProvider::DataProvider( const char* fn, bool mipmap, bool bgr, bool lineariz
     m_current = m_bmp[0].get();
 }
 
+DataProvider::DataProvider(const char* data, uint32_t width, uint32_t height, bool mipmap, bool bgr, bool linearize)
+    : m_offset(0)
+    , m_lines(32)
+    , m_mipmap(mipmap)
+    , m_done(false)
+    , m_linearize(linearize)
+{
+    m_bmp.emplace_back(new Bitmap(data, width, height, m_lines, bgr));
+    m_current = m_bmp[0].get();
+}
+
 DataProvider::~DataProvider()
 {
 }

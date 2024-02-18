@@ -18,7 +18,7 @@ struct bc7enc_compress_block_params;
 class BlockData
 {
 public:
-    enum Type
+    enum Type : int
     {
         Etc1,
         Etc2_RGB,
@@ -32,15 +32,15 @@ public:
         Bc7
     };
 
-    enum Format
+    enum Format : int
     {
-        Pvr,
-        Dds
+        Pvr = 0,
+        Dds = 1
     };
 
     BlockData( const char* fn );
     BlockData( const char* fn, const v2i& size, bool mipmap, Type type, Format format );
-    BlockData( const v2i& size, bool mipmap, Type type );
+    BlockData( const v2i& size, bool mipmap, Type type, Format format = Format::Pvr);
     ~BlockData();
 
     BitmapPtr Decode();
@@ -49,6 +49,10 @@ public:
     void ProcessRGBA( const uint32_t* src, uint32_t blocks, size_t offset, size_t width, bool useHeuristics, const bc7enc_compress_block_params* params );
 
     const v2i& Size() const { return m_size; }
+
+    const size_t DataSize() const { return m_maplen; }
+
+    const uint8_t* Data() const { return m_data; }
 
 private:
     etcpak_no_inline BitmapPtr DecodeRGB();

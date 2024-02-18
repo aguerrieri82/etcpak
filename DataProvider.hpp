@@ -19,6 +19,7 @@ class DataProvider
 {
 public:
     DataProvider( const char* fn, bool mipmap, bool bgr, bool linearize );
+    DataProvider( const char* buffer, uint32_t width, uint32_t height, bool mipmap, bool bgr, bool linearize);
     ~DataProvider();
 
     unsigned int NumberOfParts() const;

@@ -323,24 +323,55 @@ BlockData::BlockData( const char* fn, const v2i& size, bool mipmap, Type type, F
     m_data = OpenForWriting( fn, m_maplen, m_size, &m_file, levels, type, format );
 }
 
-BlockData::BlockData( const v2i& size, bool mipmap, Type type )
+BlockData::BlockData( const v2i& size, bool mipmap, Type type, Format format)
     : m_size( size )
-    , m_dataOffset( 52 )
     , m_file( nullptr )
     , m_maplen( m_size.x*m_size.y/2 )
     , m_type( type )
 {
     assert( m_size.x%4 == 0 && m_size.y%4 == 0 );
+
+    int levels = 1;
+
     if( mipmap )
     {
-        const int levels = NumberOfMipLevels( size );
+        levels = NumberOfMipLevels( size );
         m_maplen += AdjustSizeForMipmaps( size, levels );
     }
 
     if( type == Etc2_RGBA || type == Bc3 || type == Bc5 || type == Bc7 || type == Etc2_RG11 ) m_maplen *= 2;
+    
+
+    switch (format)
+    {
+    case Pvr:
+        m_dataOffset = 52;
+        break;
+    case Dds:
+        m_dataOffset = 128;
+        if (type == Bc4 || type == Bc5 || type == Bc7) m_dataOffset += 20;
+        break;
+    default:
+        assert(false);
+        break;
+    }
 
     m_maplen += m_dataOffset;
     m_data = new uint8_t[m_maplen];
+
+    switch (format)
+    {
+    case Pvr:
+        WritePvrHeader((uint32_t*)m_data, type, size, levels);
+        break;
+    case Dds:
+        WriteDdsHeader((uint32_t*)m_data, type, size, levels);
+        break;
+    default:
+        assert(false);
+        break;
+    }
+
 }
 
 BlockData::~BlockData()

@@ -154,6 +154,31 @@ Bitmap::Bitmap( const char* fn, unsigned int lines, bool bgr )
     }
 }
 
+Bitmap::Bitmap(const char* data, unsigned int width, unsigned int height, unsigned int lines, bool bgr)
+    : m_block(nullptr)
+    , m_lines(lines)
+    , m_alpha(true)
+    , m_sema(0)
+{
+
+    m_alpha = true;
+    m_size.x = width;
+    m_size.y = height;
+
+    assert(m_size.x % 4 == 0);
+    assert(m_size.y % 4 == 0);
+
+
+    m_block = m_data = (uint32_t*)data;
+    m_linesLeft = m_size.y / 4;
+
+
+    for (int i = 0; i < m_size.y / 4; i++)
+        m_sema.unlock();
+
+    m_keepData = true;
+}
+
 Bitmap::Bitmap( const v2i& size )
     : m_data( new uint32_t[size.x*size.y] )
     , m_block( nullptr )
@@ -173,7 +198,8 @@ Bitmap::Bitmap( const Bitmap& src, unsigned int lines )
 
 Bitmap::~Bitmap()
 {
-    delete[] m_data;
+    if (!m_keepData)
+        delete[] m_data;
 }
 
 void Bitmap::Write( const char* fn )
