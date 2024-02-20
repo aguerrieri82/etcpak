@@ -32,6 +32,7 @@
 #define APIENTRY
 #endif
 
+
 extern "C" {
 
     #define BOOL uint32_t
@@ -49,10 +50,31 @@ extern "C" {
         int Test;
     };
 
+    EXPORT void APIENTRY PackImage(uint32_t srcWidth, uint32_t srcHeight, char* srcData, uint32_t dstWidth, uint32_t dstHeight, char* dstData, uint32_t pixelSize)
+    {
+        auto dstRowSize = pixelSize * dstWidth;
+        auto srcRowSize = pixelSize * srcWidth;
+
+        auto dstSize = dstRowSize * dstHeight;
+        memset(dstData, 0, dstSize);
+
+        int curY = 0;
+        char* srcRow = srcData;
+        char* dstRow = dstData;
+
+        while (curY < srcHeight) {
+
+            memcpy(dstRow, srcRow, srcRowSize);
+            curY++;
+            dstRow += dstRowSize;
+            srcRow += srcRowSize;
+        }
+    }
+
 
     EXPORT uint8_t* APIENTRY Encode(uint32_t width, uint32_t height, char* data, EncodeOptions& options, uint32_t* outSize) {
 
-        unsigned int cpus = System::CPUCores();
+
         const bool rgba = (options.Codec == BlockData::Etc2_RGBA || options.Codec == BlockData::Bc3 || options.Codec == BlockData::Bc7);
 
         bc7enc_compress_block_params bc7params;
@@ -66,6 +88,8 @@ extern "C" {
         DataProvider dp(data, width, height, options.MipMap, options.Bgr, options.Linearize);
         auto num = dp.NumberOfParts();
 
+
+        unsigned int cpus = System::CPUCores();
         TaskDispatch taskDispatch(cpus);
 
         auto bd = std::make_shared<BlockData>(dp.Size(), options.MipMap, options.Codec, options.Format);
@@ -75,21 +99,21 @@ extern "C" {
 
             if (rgba)
             {
-                TaskDispatch::Queue([part, &bd, &options, &bc7params]()
+                taskDispatch.Queue([part, &bd, &options, &bc7params]()
                     {
                         bd->ProcessRGBA(part.src, part.width / 4 * part.lines, part.offset, part.width, options.UseHeuristics, &bc7params);
                     });
             }
             else
             {
-                TaskDispatch::Queue([part, &bd, &options]()
+                taskDispatch.Queue([part, &bd, &options]()
                     {
                         bd->Process(part.src, part.width / 4 * part.lines, part.offset, part.width, options.Dither, options.UseHeuristics);
                     });
             }
         }
 
-        TaskDispatch::Sync();
+        taskDispatch.Sync();
 
         *outSize = bd->DataSize();
         auto outData = new uint8_t[*outSize];

@@ -305,21 +305,21 @@ int main( int argc, char** argv )
 
             if( rgba )
             {
-                TaskDispatch::Queue( [part, &bd, useHeuristics, &bc7params]()
+                taskDispatch.Queue( [part, &bd, useHeuristics, &bc7params]()
                 {
                     bd->ProcessRGBA( part.src, part.width / 4 * part.lines, part.offset, part.width, useHeuristics, &bc7params );
                 } );
             }
             else
             {
-                TaskDispatch::Queue( [part, &bd, &dither, useHeuristics]()
+                taskDispatch.Queue( [part, &bd, &dither, useHeuristics]()
                 {
                     bd->Process( part.src, part.width / 4 * part.lines, part.offset, part.width, dither, useHeuristics );
                 } );
             }
         }
 
-        TaskDispatch::Sync();
+        taskDispatch.Sync();
 
         if( stats )
         {
