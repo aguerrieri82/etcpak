@@ -16,7 +16,7 @@ LOCAL_CPPFLAGS += -D__ARM_NEON
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../zlib
 
-LOCAL_SRC_FILES	:= 	$(wildcard $(LOCAL_PATH)/../zlib/*.c) \
+LOCAL_SRC_FILES	:= 	$(wildcard $(LOCAL_PATH)/../../zlib/*.c) \
 					$(wildcard $(LOCAL_PATH)/../*.cpp) \
 					$(wildcard $(LOCAL_PATH)/../libpng/*.c) \
 					$(wildcard $(LOCAL_PATH)/../getopt/*.c) \
