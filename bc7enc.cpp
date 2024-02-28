@@ -1146,8 +1146,8 @@ static uint64_t color_cell_compression(uint32_t mode, const color_cell_compresso
 
 	for (uint32_t i = 0; i < pParams->m_num_pixels; i++)
 	{
-		vec4F color = vec4F_from_color(&pParams->m_pPixels[i]);
-		meanColor = vec4F_add(&meanColor, &color);
+		vec4F baseColorFactor = vec4F_from_color(&pParams->m_pPixels[i]);
+		meanColor = vec4F_add(&meanColor, &baseColorFactor);
 	}
 				
 	vec4F meanColorScaled = vec4F_mul(&meanColor, 1.0f / (float)(pParams->m_num_pixels));
@@ -1161,13 +1161,13 @@ static uint64_t color_cell_compression(uint32_t mode, const color_cell_compresso
 		vec4F_set_scalar(&axis, 0.0f);
 		for (uint32_t i = 0; i < pParams->m_num_pixels; i++)
 		{
-			vec4F color = vec4F_from_color(&pParams->m_pPixels[i]);
-			color = vec4F_sub(&color, &meanColorScaled);
-			vec4F a = vec4F_mul(&color, color.m_c[0]);
-			vec4F b = vec4F_mul(&color, color.m_c[1]);
-			vec4F c = vec4F_mul(&color, color.m_c[2]);
-			vec4F d = vec4F_mul(&color, color.m_c[3]);
-			vec4F n = i ? axis : color;
+			vec4F baseColorFactor = vec4F_from_color(&pParams->m_pPixels[i]);
+			baseColorFactor = vec4F_sub(&baseColorFactor, &meanColorScaled);
+			vec4F a = vec4F_mul(&baseColorFactor, baseColorFactor.m_c[0]);
+			vec4F b = vec4F_mul(&baseColorFactor, baseColorFactor.m_c[1]);
+			vec4F c = vec4F_mul(&baseColorFactor, baseColorFactor.m_c[2]);
+			vec4F d = vec4F_mul(&baseColorFactor, baseColorFactor.m_c[3]);
+			vec4F n = i ? axis : baseColorFactor;
 			vec4F_normalize_in_place(&n);
 			axis.m_c[0] += vec4F_dot(&a, &n);
 			axis.m_c[1] += vec4F_dot(&b, &n);
@@ -1233,9 +1233,9 @@ static uint64_t color_cell_compression(uint32_t mode, const color_cell_compresso
 
 	for (uint32_t i = 0; i < pParams->m_num_pixels; i++)
 	{
-		vec4F color = vec4F_from_color(&pParams->m_pPixels[i]);
+		vec4F baseColorFactor = vec4F_from_color(&pParams->m_pPixels[i]);
 
-		vec4F q = vec4F_sub(&color, &meanColorScaled);
+		vec4F q = vec4F_sub(&baseColorFactor, &meanColorScaled);
 		float d = vec4F_dot(&q, &axis);
 
 		l = minimumf(l, d);
