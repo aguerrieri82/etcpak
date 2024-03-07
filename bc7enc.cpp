@@ -7,6 +7,17 @@
 #include <limits.h>
 #include <algorithm>
 
+#if defined __SSE4_1__ || defined __AVX2__ || defined _MSC_VER
+#  ifdef _MSC_VER
+#    include <intrin.h>
+#    include <Windows.h>
+#    define _bswap(x) _byteswap_ulong(x)
+#    define _bswap64(x) _byteswap_uint64(x)
+#  else
+#    include <x86intrin.h>
+#  endif
+#endif
+
 // Helpers
 static inline int32_t clampi(int32_t value, int32_t low, int32_t high) { if (value < low) value = low; else if (value > high) value = high;	return value; }
 static inline float clampf(float value, float low, float high) { if (value < low) value = low; else if (value > high) value = high;	return value; }
@@ -504,6 +515,51 @@ static inline color_rgba scale_color(const color_rgba *pC, const color_cell_comp
 
 static inline uint64_t compute_color_distance_rgb(const color_rgba *pE1, const color_rgba *pE2, bool perceptual, const uint32_t weights[4])
 {
+#ifdef __AVX2__
+	uint32_t e1, e2;
+	memcpy( &e1, pE1, 4 );
+	memcpy( &e2, pE2, 4 );
+
+	__m128i vE1 = _mm_cvtepu8_epi32( _mm_cvtsi32_si128( e1 ) );
+	__m128i vE2 = _mm_cvtepu8_epi32( _mm_cvtsi32_si128( e2 ) );
+	__m256i vE = _mm256_inserti128_si256( _mm256_castsi128_si256( vE1 ), vE2, 1 );
+
+	__m128i vDelta;
+
+	if (perceptual)
+	{
+		__m256i vPercWeights = _mm256_set_epi32( 0, 37, 366, 109, 0, 37, 366, 109 );
+		__m256i vL1 = _mm256_mullo_epi32( vE, vPercWeights );
+		__m256i vL2 = _mm256_shuffle_epi32( vL1, _MM_SHUFFLE( 2, 3, 0, 1 ) );
+		__m256i vL3 = _mm256_add_epi32( vL1, vL2 );
+		__m256i vL4 = _mm256_shuffle_epi32( vL3, _MM_SHUFFLE( 1, 0, 3, 2 ) );
+		__m256i vL5 = _mm256_add_epi32( vL3, vL4 );
+		__m256i vL6 = _mm256_blend_epi32( _mm256_setzero_si256(), vL5, 0x11 );
+		__m256i vCrb1 = _mm256_slli_epi32( vE, 9 );
+		__m256i vCrb2 = _mm256_sub_epi32( vCrb1, vL5 );
+		__m256i vCrb3 = _mm256_and_si256( vCrb2, _mm256_set_epi32( 0, 0xFFFFFFFF, 0, 0xFFFFFFFF, 0, 0xFFFFFFFF, 0, 0xFFFFFFFF ) );
+		__m256i vCrb4 = _mm256_shuffle_epi32( vCrb3, _MM_SHUFFLE( 3, 2, 0, 3 ) );
+		__m256i vD1 = _mm256_or_si256( vL6, vCrb4 );
+		__m128i vD2 = _mm256_castsi256_si128( vD1 );
+		__m128i vD3 = _mm256_extracti128_si256( vD1, 1 );
+		__m128i vD4 = _mm_sub_epi32( vD2, vD3 );
+		vDelta = _mm_srai_epi32( vD4, 8 );
+	}
+	else
+	{
+		vDelta = _mm_sub_epi32(vE1, vE2);
+	}
+
+	__m128i vWeights = _mm_loadu_si128( (const __m128i*)weights );
+	__m128i vDelta2 = _mm_mullo_epi32( vDelta, vDelta );
+	__m128i vDelta3 = _mm_mullo_epi32( vDelta2, vWeights );
+	__m128i vDelta4 = _mm_shuffle_epi32( vDelta3, _MM_SHUFFLE( 2, 3, 0, 1 ) );
+	__m128i vDelta5 = _mm_add_epi32( vDelta3, vDelta4 );
+	__m128i vDelta6 = _mm_shuffle_epi32( vDelta5, _MM_SHUFFLE( 1, 0, 3, 2 ) );
+	__m128i vDelta7 = _mm_add_epi32( vDelta5, vDelta6 );
+
+	return _mm_cvtsi128_si32( vDelta7 );
+#else
 	int dr, dg, db;
 
 	if (perceptual)
@@ -526,6 +582,7 @@ static inline uint64_t compute_color_distance_rgb(const color_rgba *pE1, const c
 	}
 
 	return weights[0] * (uint32_t)(dr * dr) + weights[1] * (uint32_t)(dg * dg) + weights[2] * (uint32_t)(db * db);
+#endif
 }
 
 static inline uint64_t compute_color_distance_rgba(const color_rgba *pE1, const color_rgba *pE2, bool perceptual, const uint32_t weights[4])
@@ -1578,8 +1635,225 @@ static uint64_t color_cell_compression_est_mode1(uint32_t num_pixels, const colo
 	return total_err;
 }
 
-static uint64_t color_cell_compression_est_mode7(uint32_t num_pixels, const color_rgba * pPixels, bool perceptual, uint32_t pweights[4], uint64_t best_err_so_far)
+static uint64_t color_cell_compression_est_mode7(uint32_t num_pixels, color_rgba * pPixels, bool perceptual, uint32_t pweights[4], uint64_t best_err_so_far)
 {
+	uint64_t total_err = 0;
+
+#ifdef __AVX2__
+	__m128i vMax2, vMin2;
+
+	if( num_pixels > 4 )
+	{
+		__m128i vMax1a, vMax1b, vMin1a, vMin1b;
+
+		if( num_pixels > 8 )
+		{
+			memset( pPixels + num_pixels, 0, (16 - num_pixels) * sizeof( color_rgba ) );
+			__m256i vMax0a = _mm256_loadu_si256( (const __m256i *)pPixels );
+			__m256i vMax0b = _mm256_loadu_si256( (const __m256i *)( pPixels + 8 ) );
+
+			memset( pPixels + num_pixels, 0xFF, (16 - num_pixels) * sizeof( color_rgba ) );
+			__m256i vMin0a = _mm256_loadu_si256( (const __m256i *)pPixels );
+			__m256i vMin0b = _mm256_loadu_si256( (const __m256i *)( pPixels + 8 ) );
+
+			__m256i vMax1 = _mm256_max_epu8( vMax0a, vMax0b );
+			__m256i vMin1 = _mm256_min_epu8( vMin0a, vMin0b );
+
+			vMax1a = _mm256_castsi256_si128( vMax1 );
+			vMax1b = _mm256_extracti128_si256( vMax1, 1 );
+
+			vMin1a = _mm256_castsi256_si128( vMin1 );
+			vMin1b = _mm256_extracti128_si256( vMin1, 1 );
+		}
+		else
+		{
+			memset( pPixels + num_pixels, 0, (8 - num_pixels) * sizeof( color_rgba ) );
+			vMax1a = _mm_loadu_si128( (const __m128i *)pPixels );
+			vMax1b = _mm_loadu_si128( (const __m128i *)( pPixels + 4 ) );
+
+			memset( pPixels + num_pixels, 0xFF, (8 - num_pixels) * sizeof( color_rgba ) );
+			vMin1a = _mm_loadu_si128( (const __m128i *)pPixels );
+			vMin1b = _mm_loadu_si128( (const __m128i *)( pPixels + 4 ) );
+		}
+
+		vMax2 = _mm_max_epu8( vMax1a, vMax1b );
+		vMin2 = _mm_min_epu8( vMin1a, vMin1b );
+	}
+	else
+	{
+		memset( pPixels + num_pixels, 0, (4 - num_pixels) * sizeof( color_rgba ) );
+		vMax2 = _mm_loadu_si128( (const __m128i *)pPixels );
+		memset( pPixels + num_pixels, 0xFF, (4 - num_pixels) * sizeof( color_rgba ) );
+		vMin2 = _mm_loadu_si128( (const __m128i *)pPixels );
+	}
+
+	__m128i vMax3 = _mm_shuffle_epi32( vMax2, _MM_SHUFFLE( 2, 3, 0, 1 ) );
+	__m128i vMin3 = _mm_shuffle_epi32( vMin2, _MM_SHUFFLE( 2, 3, 0, 1 ) );
+
+	__m128i vMax4 = _mm_max_epu8( vMax2, vMax3 );
+	__m128i vMin4 = _mm_min_epu8( vMin2, vMin3 );
+
+	__m128i vMax5 = _mm_shuffle_epi32( vMax4, _MM_SHUFFLE( 1, 0, 3, 2 ) );
+	__m128i vMin5 = _mm_shuffle_epi32( vMin4, _MM_SHUFFLE( 1, 0, 3, 2 ) );
+
+	__m128i vMax6 = _mm_max_epu8( vMax4, vMax5 );
+	__m128i vMin6 = _mm_min_epu8( vMin4, vMin5 );
+
+	__m256i vMin7 = _mm256_cvtepu8_epi16( vMin6 );
+
+	__m128i vBc7Weights2a = _mm_loadu_si128( (const __m128i *)g_bc7_weights2 );
+	__m128i vBc7Weights2b = _mm_shuffle_epi8( vBc7Weights2a, _mm_set_epi8( 12, 12, 12, 12, 8, 8, 8, 8, 4, 4, 4, 4, 0, 0, 0, 0 ) );
+	__m256i vBc7Weights2c = _mm256_cvtepu8_epi16( vBc7Weights2b );
+
+	__m128i vLerpSub128 = _mm_subs_epu8( vMax6, vMin6 );
+	__m256i vLerpSub = _mm256_cvtepu8_epi16( vLerpSub128 );
+	__m256i vLerpMul = _mm256_mullo_epi16( vLerpSub, vBc7Weights2c );
+	__m256i vLerpSum = _mm256_adds_epu16( vLerpMul, _mm256_slli_epi16( vMin7, 6 ) );
+	__m256i vLerpAdd = _mm256_adds_epu16( vLerpSum, _mm256_set1_epi16( 32 ) );
+	__m256i vLerp = _mm256_srli_epi16( vLerpAdd, 6 );
+	__m128i vLerp128 = _mm_packus_epi16( _mm256_castsi256_si128( vLerp ), _mm256_extracti128_si256( vLerp, 1 ) );
+
+	__m256i vDots0 = _mm256_madd_epi16( vLerp, vLerpSub );
+	__m128i vDots1 = _mm_hadd_epi32( _mm256_castsi256_si128( vDots0 ), _mm256_extracti128_si256( vDots0, 1 ) );
+	__m128i vDots2 = _mm_shuffle_epi32( vDots1, _MM_SHUFFLE( 3, 3, 2, 1 ) );
+
+	__m128i vThresh0 = _mm_add_epi32( vDots1, vDots2 );
+	__m128i vThresh1 = _mm_sub_epi32( vThresh0, _mm_set1_epi32( 1 ) );
+	__m128i vThresh2 = _mm_srai_epi32( vThresh1, 1 );
+	__m128i vThresh = _mm_blend_epi32( vThresh2, _mm_set1_epi32( 0x7FFFFFFF ), 8 );
+
+	color_rgba weightedColors[4];
+	_mm_storeu_si128( (__m128i *)weightedColors, vLerp128 );
+
+	if (perceptual)
+	{
+		__m128i vPweights = _mm_loadu_si128((const __m128i *)pweights);
+		__m256i vPercWeights = _mm256_set_epi16( 0, 37, 366, 109, 0, 37, 366, 109, 0, 37, 366, 109, 0, 37, 366, 109 );
+
+		__m256i vL0 = _mm256_madd_epi16( vLerp, vPercWeights );
+		__m256i vL1 = _mm256_shuffle_epi32( vL0, _MM_SHUFFLE( 2, 3, 0, 1 ) );
+		__m256i vL2 = _mm256_add_epi32( vL0, vL1 );
+		__m256i vL3 = _mm256_shuffle_epi32( vL2, _MM_SHUFFLE( 2, 0, 2, 0 ) );
+		__m128i vL = _mm_blend_epi32( _mm256_castsi256_si128( vL3 ), _mm256_extracti128_si256( vL3, 1 ), 0xC );
+
+		__m256i vRB0 = _mm256_blend_epi16( vLerp, _mm256_setzero_si256(), 0xAA );
+		__m256i vRB1 = _mm256_slli_epi32( vRB0, 9 );
+		__m256i vRB2 = _mm256_sub_epi32( vRB1, vL2 );
+		__m256i vRB3 = _mm256_permutevar8x32_epi32( vRB2, _mm256_set_epi32( 7, 5, 3, 1, 6, 4, 2, 0 ) );
+
+		__m128i vCr = _mm256_castsi256_si128( vRB3 );
+		__m128i vCb = _mm256_extracti128_si256( vRB3, 1 );
+		__m128i vZero = _mm_setzero_si128();
+
+		__m128i vTmp0 = _mm_unpacklo_epi32( vL, vCb );
+		__m128i vTmp1 = _mm_unpacklo_epi32( vCr, vZero );
+		__m128i vTmp2 = _mm_unpackhi_epi32( vL, vCb );
+		__m128i vTmp3 = _mm_unpackhi_epi32( vCr, vZero );
+
+		__m128i vPxT[4] = {
+			_mm_unpacklo_epi32( vTmp0, vTmp1 ),
+			_mm_unpackhi_epi32( vTmp0, vTmp1 ),
+			_mm_unpacklo_epi32( vTmp2, vTmp3 ),
+			_mm_unpackhi_epi32( vTmp2, vTmp3 )
+		};
+
+		for (uint32_t i = 0; i < num_pixels; i+=4)
+		{
+			const color_rgba* pC = &pPixels[i];
+
+			__m128i vC0 = _mm_loadu_si128( (const __m128i *)pC );
+			__m256i vC1 = _mm256_cvtepu8_epi16( vC0 );
+			__m256i vD0 = _mm256_madd_epi16( vC1, vLerpSub );
+			__m128i vD1 = _mm_hadd_epi32( _mm256_castsi256_si128( vD0 ), _mm256_extracti128_si256( vD0, 1 ) );
+
+			int dtable[4];
+			_mm_storeu_si128( (__m128i *)dtable, vD1 );
+
+			__m256i v2L0 = _mm256_madd_epi16( vC1, vPercWeights );
+			__m256i v2L1 = _mm256_shuffle_epi32( v2L0, _MM_SHUFFLE( 2, 3, 0, 1 ) );
+			__m256i v2L2 = _mm256_add_epi32( v2L0, v2L1 );
+			__m256i v2L3 = _mm256_shuffle_epi32( v2L2, _MM_SHUFFLE( 2, 0, 2, 0 ) );
+			__m128i v2L = _mm_blend_epi32( _mm256_castsi256_si128( v2L3 ), _mm256_extracti128_si256( v2L3, 1 ), 0xC );
+
+			__m256i v2RB0 = _mm256_blend_epi16( vC1, _mm256_setzero_si256(), 0xAA );
+			__m256i v2RB1 = _mm256_slli_epi32( v2RB0, 9 );
+			__m256i v2RB2 = _mm256_sub_epi32( v2RB1, v2L2 );
+			__m256i v2RB3 = _mm256_permutevar8x32_epi32( v2RB2, _mm256_set_epi32( 7, 5, 3, 1, 6, 4, 2, 0 ) );
+
+			__m128i v2Cr = _mm256_castsi256_si128( v2RB3 );
+			__m128i v2Cb = _mm256_extracti128_si256( v2RB3, 1 );
+
+			__m128i v2Tmp0 = _mm_unpacklo_epi32( v2L, v2Cb );
+			__m128i v2Tmp1 = _mm_unpacklo_epi32( v2Cr, vZero );
+			__m128i v2Tmp2 = _mm_unpackhi_epi32( v2L, v2Cb );
+			__m128i v2Tmp3 = _mm_unpackhi_epi32( v2Cr, vZero );
+
+			__m128i v2PxT[4] = {
+				_mm_unpacklo_epi32( v2Tmp0, v2Tmp1 ),
+				_mm_unpackhi_epi32( v2Tmp0, v2Tmp1 ),
+				_mm_unpacklo_epi32( v2Tmp2, v2Tmp3 ),
+				_mm_unpackhi_epi32( v2Tmp2, v2Tmp3 )
+			};
+
+			// Transform block's interpolated colors to YCbCr
+			int l2t[4], cr2t[4], cb2t[4];
+
+			_mm_storeu_si128( (__m128i *)l2t, v2L );
+			_mm_storeu_si128( (__m128i *)cr2t, _mm256_castsi256_si128( v2RB3 ) );
+			_mm_storeu_si128( (__m128i *)cb2t, _mm256_extracti128_si256( v2RB3, 1 ) );
+
+			const uint32_t end = minimumu( i + 4, num_pixels );
+			for (uint32_t j=i; j<end; j++)
+			{
+				// Find approximate selector
+				__m128i vD = _mm_set1_epi32( dtable[j-i] );
+#ifdef __AVX512VL__
+				__mmask8 vCmp = _mm_cmpgt_epi32_mask( vD, vThresh );
+				uint32_t s = _mm_popcnt_u32( vCmp );
+#else
+				__m128i vCmp = _mm_cmpgt_epi32( vD, vThresh );
+				uint32_t s = _mm_popcnt_u32( _mm_movemask_epi8( vCmp ) ) / 4;
+#endif
+
+				// Compute error
+				__m128i vPx = vPxT[s];
+				__m128i v2Px = v2PxT[j-i];
+
+				__m128i vSub = _mm_sub_epi32( vPx, v2Px );
+				__m128i vShift = _mm_srai_epi32( vSub, 8 );
+
+				const int dca = (int)pC->m_c[3] - (int)weightedColors[s].m_c[3];
+				__m128i vAlpha0 = _mm_set1_epi32( dca );
+				__m128i vAlpha1 = _mm_blend_epi32( vShift, vAlpha0, 8 );
+
+				__m128i vMul0 = _mm_mullo_epi32( vAlpha1, vAlpha1 );
+				__m128i vMul1 = _mm_mullo_epi32( vMul0, vPweights );
+				__m128i vAdd0 = _mm_shuffle_epi32( vMul1, _MM_SHUFFLE( 2, 3, 0, 1 ) );
+				__m128i vAdd1 = _mm_add_epi32( vMul1, vAdd0 );
+				__m128i vAdd2 = _mm_shuffle_epi32( vAdd1, _MM_SHUFFLE( 1, 0, 3, 2 ) );
+				__m128i vAdd3 = _mm_add_epi32( vAdd1, vAdd2 );
+
+				int ie = _mm_cvtsi128_si32( vAdd3 );
+				total_err += ie;
+				if (total_err > best_err_so_far)
+					break;
+
+				pC++;
+			}
+			if (total_err > best_err_so_far)
+				break;
+		}
+	}
+	else
+	{
+		const uint32_t N = 4;
+		uint8_t a[4];
+		uint32_t lerp = _mm_cvtsi128_si32( vLerpSub128 );
+		memcpy( a, &lerp, 4 );
+
+		int thresh[4];
+		_mm_storeu_si128( (__m128i *)thresh, vThresh2 );
+#else
 	// Find RGB bounds as an approximation of the block's principle axis
 	uint32_t lr = 255, lg = 255, lb = 255, la = 255;
 	uint32_t hr = 0, hg = 0, hb = 0, ha = 0;
@@ -1615,20 +1889,16 @@ static uint64_t color_cell_compression_est_mode7(uint32_t num_pixels, const colo
 	}
 
 	// Compute dots and thresholds
-	const int ar = highColor.m_c[0] - lowColor.m_c[0];
-	const int ag = highColor.m_c[1] - lowColor.m_c[1];
-	const int ab = highColor.m_c[2] - lowColor.m_c[2];
-	const int aa = highColor.m_c[3] - lowColor.m_c[3];
+	int a[4] = { highColor.m_c[0] - lowColor.m_c[0], highColor.m_c[1] - lowColor.m_c[1], highColor.m_c[2] - lowColor.m_c[2], highColor.m_c[3] - lowColor.m_c[3] };
 
 	int dots[4];
 	for (uint32_t i = 0; i < N; i++)
-		dots[i] = weightedColors[i].m_c[0] * ar + weightedColors[i].m_c[1] * ag + weightedColors[i].m_c[2] * ab + weightedColors[i].m_c[3] * aa;
+		dots[i] = weightedColors[i].m_c[0] * a[0] + weightedColors[i].m_c[1] * a[1] + weightedColors[i].m_c[2] * a[2] + weightedColors[i].m_c[3] * a[3];
 
 	int thresh[4 - 1];
 	for (uint32_t i = 0; i < (N - 1); i++)
 		thresh[i] = (dots[i] + dots[i + 1] + 1) >> 1;
 
-	uint64_t total_err = 0;
 	if (perceptual)
 	{
 		// Transform block's interpolated colors to YCbCr
@@ -1645,7 +1915,7 @@ static uint64_t color_cell_compression_est_mode7(uint32_t num_pixels, const colo
 		{
 			const color_rgba* pC = &pPixels[i];
 
-			int d = ar * pC->m_c[0] + ag * pC->m_c[1] + ab * pC->m_c[2] + aa * pC->m_c[3];
+			int d = a[0] * pC->m_c[0] + a[1] * pC->m_c[1] + a[2] * pC->m_c[2] + a[3] * pC->m_c[3];
 
 			// Find approximate selector
 			uint32_t s = 0;
@@ -1676,11 +1946,12 @@ static uint64_t color_cell_compression_est_mode7(uint32_t num_pixels, const colo
 	}
 	else
 	{
+#endif
 		for (uint32_t i = 0; i < num_pixels; i++)
 		{
 			const color_rgba* pC = &pPixels[i];
 
-			int d = ar * pC->m_c[0] + ag * pC->m_c[1] + ab * pC->m_c[2] + aa * pC->m_c[3];
+			int d = a[0] * pC->m_c[0] + a[1] * pC->m_c[1] + a[2] * pC->m_c[2] + a[3] * pC->m_c[3];
 
 			// Find approximate selector
 			uint32_t s = 0;
@@ -1801,10 +2072,14 @@ static uint32_t estimate_partition(const color_rgba *pPixels, const bc7enc_compr
 		const uint8_t *pPartition = &g_bc7_partition2[partition * 16];
 
 		color_rgba subset_colors[2][16];
-		uint32_t subset_total_colors[2] = { 0, 0 };
+		color_rgba* subset_ptr[] = { subset_colors[0], subset_colors[1] };
 		for (uint32_t index = 0; index < 16; index++)
-			subset_colors[pPartition[index]][subset_total_colors[pPartition[index]]++] = pPixels[index];
-						
+			if(pPartition[index] == 0)
+				*subset_ptr[0]++ = pPixels[index];
+			else
+				*subset_ptr[1]++ = pPixels[index];
+		uint32_t subset_total_colors[2] = { uint32_t(subset_ptr[0] - subset_colors[0]), uint32_t(subset_ptr[1] - subset_colors[1]) };
+
 		uint64_t total_subset_err = 0;
 		for (uint32_t subset = 0; (subset < 2) && (total_subset_err < best_err); subset++)
 		{
