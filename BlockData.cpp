@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <string.h>
 
+#include "bcdec.h"
 #include "BlockData.hpp"
 #include "ColorSpace.hpp"
 #include "Debug.hpp"
@@ -112,6 +113,45 @@ BlockData::BlockData( const char* fn )
         m_size.x = *(data32+9);
         m_size.y = *(data32+10);
         m_dataOffset = sizeof( uint32_t ) * 17 + *(data32+15);
+    }
+    else if( *data32 == 0x20534444 )
+    {
+        // DDS
+        switch( *(data32+21) )
+        {
+        case 0x31545844:
+            m_type = Bc1;
+            m_dataOffset = 128;
+            break;
+        case 0x35545844:
+            m_type = Bc3;
+            m_dataOffset = 128;
+            break;
+        case 0x30315844:
+            m_dataOffset = 148;
+            switch( *(data32+32) )
+            {
+            case 77:
+                m_type = Bc4;
+                break;
+            case 85:
+                m_type = Bc5;
+                break;
+            case 98:
+                m_type = Bc7;
+                break;
+            default:
+                assert( false );
+                break;
+            };
+            break;
+        default:
+            assert( false );
+            break;
+        };
+
+        m_size.x = *(data32+4);
+        m_size.y = *(data32+3);
     }
     else
     {
@@ -881,6 +921,8 @@ BitmapPtr BlockData::Decode()
         return DecodeBc4();
     case Bc5:
         return DecodeBc5();
+    case Bc7:
+        return DecodeBc7();
     default:
         assert( false );
         return nullptr;
@@ -1783,6 +1825,27 @@ BitmapPtr BlockData::DecodeBc5()
             uint64_t r = *src++;
             uint64_t g = *src++;
             DecodeBc5Part( r, g, dst, m_size.x );
+            dst += 4;
+        }
+        dst += m_size.x*3;
+    }
+
+    return ret;
+}
+
+BitmapPtr BlockData::DecodeBc7()
+{
+    auto ret = std::make_shared<Bitmap>( m_size );
+
+    const uint64_t* src = (const uint64_t*)( m_data + m_dataOffset );
+    uint32_t* dst = ret->Data();
+
+    for( int y=0; y<m_size.y/4; y++ )
+    {
+        for( int x=0; x<m_size.x/4; x++ )
+        {
+            bcdec_bc7( src, dst, m_size.x * 4 );
+            src += 2;
             dst += 4;
         }
         dst += m_size.x*3;

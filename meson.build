@@ -3,6 +3,7 @@ project('etcpak', 'c', 'cpp', default_options: ['cpp_std=c++20', 'b_lto=true'])
 sources = [
     'Application.cpp',
     'bc7enc.cpp',
+    'bcdec.c',
     'Bitmap.cpp',
     'BitmapDownsampled.cpp',
     'BlockData.cpp',
@@ -58,10 +59,14 @@ deps = [
 ]
 
 if get_option('tracy_enable')
-    add_project_arguments('-DTRACY_ENABLE', language: ['c', 'cpp'])
     if get_option('buildtype') != 'debugoptimized'
-        message('Profiling builds should set --buildtype=debugoptimized')
+        warning('Profiling builds should set --buildtype=debugoptimized')
     endif
+    add_project_arguments('-DTRACY_ENABLE', language: ['c', 'cpp'])
+    frame_pointer_args = compiler.get_supported_arguments([
+        '-fno-omit-frame-pointer'
+    ])
+    add_project_arguments(frame_pointer_args, language: ['c', 'cpp'])
 endif
 
 add_project_arguments(['-DNO_GZIP', '-DPNG_INTEL_SSE'], language: ['c', 'cpp'])
