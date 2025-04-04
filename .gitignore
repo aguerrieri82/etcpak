@@ -9,6 +9,8 @@ unix/etcpak
 *.d
 .cache
 /.vs/EtcPack
-/bin/x64
-/obj/x64
+/bin
+/obj
+/libs
 /EtcPack.vcxproj.user
+

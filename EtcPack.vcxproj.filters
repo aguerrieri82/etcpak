@@ -48,21 +48,6 @@
     <ClCompile Include="getopt\getopt.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="libpng\arm_init.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="libpng\filter_neon_intrinsics.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="libpng\filter_sse2_intrinsics.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="libpng\intel_init.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="libpng\palette_neon_intrinsics.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="libpng\png.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -106,9 +91,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="libpng\pngwutil.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="lz4\lz4.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="mmap.cpp">
@@ -179,6 +161,12 @@
     </ClCompile>
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="bcdec.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libpng\intel\filter_sse2_intrinsics.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libpng\intel\intel_init.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
