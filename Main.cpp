@@ -50,28 +50,6 @@ extern "C" {
         int Test;
     };
 
-    EXPORT void APIENTRY PackImage(uint32_t srcWidth, uint32_t srcHeight, char* srcData, uint32_t dstWidth, uint32_t dstHeight, char* dstData, uint32_t pixelSize)
-    {
-        auto dstRowSize = pixelSize * dstWidth;
-        auto srcRowSize = pixelSize * srcWidth;
-
-        auto dstSize = dstRowSize * dstHeight;
-        memset(dstData, 0, dstSize);
-
-        int curY = 0;
-        char* srcRow = srcData;
-        char* dstRow = dstData;
-
-        while (curY < srcHeight) {
-
-            memcpy(dstRow, srcRow, srcRowSize);
-            curY++;
-            dstRow += dstRowSize;
-            srcRow += srcRowSize;
-        }
-    }
-
-
     EXPORT uint8_t* APIENTRY Encode(uint32_t width, uint32_t height, char* data, EncodeOptions& options, uint32_t* outSize) {
 
 
