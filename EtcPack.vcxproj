@@ -47,8 +47,6 @@
     <ClCompile Include="Dither.cpp" />
     <ClCompile Include="Error.cpp" />
     <ClCompile Include="getopt\getopt.c" />
-    <ClCompile Include="libpng\intel\filter_sse2_intrinsics.c" />
-    <ClCompile Include="libpng\intel\intel_init.c" />
     <ClCompile Include="libpng\png.c" />
     <ClCompile Include="libpng\pngerror.c" />
     <ClCompile Include="libpng\pngget.c" />
@@ -59,6 +57,7 @@
     <ClCompile Include="libpng\pngrtran.c" />
     <ClCompile Include="libpng\pngrutil.c" />
     <ClCompile Include="libpng\pngset.c" />
+    <ClCompile Include="libpng\pngsimd.c" />
     <ClCompile Include="libpng\pngtrans.c" />
     <ClCompile Include="libpng\pngwio.c" />
     <ClCompile Include="libpng\pngwrite.c" />
