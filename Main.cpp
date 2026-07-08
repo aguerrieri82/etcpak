@@ -346,10 +346,19 @@ extern "C" {
         int bitDepth = png_get_bit_depth(png, info);
         int colorType = png_get_color_type(png, info);
 
+        if (colorType == PNG_COLOR_TYPE_PALETTE)
+            png_set_palette_to_rgb(png);
+
+        if (png_get_valid(png, info, PNG_INFO_tRNS))
+            png_set_tRNS_to_alpha(png);
+
         if (bitDepth == 16 && swap16)
             png_set_swap(png);
 
         png_read_update_info(png, info);
+
+        bitDepth = png_get_bit_depth(png, info);
+        colorType = png_get_color_type(png, info);
 
         png_size_t rb = png_get_rowbytes(png, info);
         if (rb > INT_MAX)
