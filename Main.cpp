@@ -185,16 +185,16 @@ extern "C" {
             if (rgba)
             {
                 taskDispatch.Queue([part, &bd, &options, &bc7params]()
-                    {
-                        bd->ProcessRGBA(part.src, part.width / 4 * part.lines, part.offset, part.width, options.UseHeuristics, &bc7params);
-                    });
+                {
+                    bd->ProcessRGBA(part.src, part.width / 4 * part.lines, part.offset, part.width, options.UseHeuristics, &bc7params);
+                });
             }
             else
             {
                 taskDispatch.Queue([part, &bd, &options]()
-                    {
-                        bd->Process(part.src, part.width / 4 * part.lines, part.offset, part.width, options.Dither, options.UseHeuristics);
-                    });
+                {
+                    bd->Process(part.src, part.width / 4 * part.lines, part.offset, part.width, options.Dither, options.UseHeuristics);
+                });
             }
         }
 
